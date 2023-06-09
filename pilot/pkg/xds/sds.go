@@ -199,13 +199,14 @@ func (s *SecretGen) generate(sr SecretResource, configClusterSecrets, proxyClust
 		return res
 	}
 
-	key, cert, err := secretController.GetKeyAndCert(sr.Name, sr.Namespace)
+	key, cert, err := secretController.GetKeyAndVal(sr.Name, sr.Namespace)
+	log.Infof("I have got the key and val %v and %v", key, cert)
 	if err != nil {
 		pilotSDSCertificateErrors.Increment()
 		log.Warnf("failed to fetch key and certificate for %s: %v", sr.ResourceName, err)
 		return nil
 	}
-	if features.VerifySDSCertificate {
+	if features.VerifySDSCertificate && (string(key) != "inline_string" && string(key) != "inline_bytes") {
 		if err := validateCertificate(cert); err != nil {
 			recordInvalidCertificate(sr.ResourceName, err)
 			return nil
@@ -391,23 +392,51 @@ func toEnvoyKeyCertSecret(name string, key, cert []byte, proxy *model.Proxy, mes
 			},
 		})
 	default:
-		res = protoconv.MessageToAny(&envoytls.Secret{
-			Name: name,
-			Type: &envoytls.Secret_TlsCertificate{
-				TlsCertificate: &envoytls.TlsCertificate{
-					CertificateChain: &core.DataSource{
-						Specifier: &core.DataSource_InlineBytes{
-							InlineBytes: cert,
-						},
-					},
-					PrivateKey: &core.DataSource{
-						Specifier: &core.DataSource_InlineBytes{
-							InlineBytes: key,
+		if string(key) == "inline_bytes" {
+			res = protoconv.MessageToAny(&envoytls.Secret{
+				Name: name,
+				Type: &envoytls.Secret_GenericSecret{
+					GenericSecret: &envoytls.GenericSecret{
+						Secret: &core.DataSource{
+							Specifier: &core.DataSource_InlineBytes{
+								InlineBytes: cert,
+							},
 						},
 					},
 				},
-			},
-		})
+			})
+		} else if string(key) == "inline_string" {
+			res = protoconv.MessageToAny(&envoytls.Secret{
+				Name: name,
+				Type: &envoytls.Secret_GenericSecret{
+					GenericSecret: &envoytls.GenericSecret{
+						Secret: &core.DataSource{
+							Specifier: &core.DataSource_InlineString{
+								InlineString: string(cert),
+							},
+						},
+					},
+				},
+			})
+		} else {
+			res = protoconv.MessageToAny(&envoytls.Secret{
+				Name: name,
+				Type: &envoytls.Secret_TlsCertificate{
+					TlsCertificate: &envoytls.TlsCertificate{
+						CertificateChain: &core.DataSource{
+							Specifier: &core.DataSource_InlineBytes{
+								InlineBytes: cert,
+							},
+						},
+						PrivateKey: &core.DataSource{
+							Specifier: &core.DataSource_InlineBytes{
+								InlineBytes: key,
+							},
+						},
+					},
+				},
+			})
+		}
 	}
 	return &discovery.Resource{
 		Name:     name,

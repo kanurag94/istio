@@ -185,6 +185,16 @@ func (s *CredentialsController) GetKeyAndCert(name, namespace string) (key []byt
 	return extractKeyAndCert(k8sSecret)
 }
 
+func (s *CredentialsController) GetKeyAndVal(name, namespace string) (key []byte, cert []byte, err error) {
+	log.Infof("Fetching secret for %s", name)
+	k8sSecret, err := s.secretLister.Secrets(namespace).Get(name)
+	if err != nil {
+		return nil, nil, fmt.Errorf("secret %v/%v not found", namespace, name)
+	}
+
+	return extractKeyAndVal(k8sSecret)
+}
+
 func (s *CredentialsController) GetCaCert(name, namespace string) (cert []byte, err error) {
 	strippedName := strings.TrimSuffix(name, securitymodel.SdsCaSuffix)
 	k8sSecret, err := s.secretLister.Secrets(namespace).Get(name)
@@ -247,6 +257,36 @@ func extractKeyAndCert(scrt *v1.Secret) (key, cert []byte, err error) {
 	}
 	if hasKeys(scrt.Data, TLSSecretCert, TLSSecretKey) {
 		return nil, nil, fmt.Errorf("found keys %q and %q, but they were empty", TLSSecretCert, TLSSecretKey)
+	}
+	found := truncatedKeysMessage(scrt.Data)
+	return nil, nil, fmt.Errorf("found secret, but didn't have expected keys (%s and %s) or (%s and %s); found: %s",
+		GenericScrtCert, GenericScrtKey, TLSSecretCert, TLSSecretKey, found)
+}
+
+// extractKeyAndVal extracts server key, certificate
+func extractKeyAndVal(scrt *v1.Secret) (key, val []byte, err error) {
+	log.Infof("Extracting secret %s", scrt.Name)
+	if hasValue(scrt.Data, GenericScrtCert, GenericScrtKey) {
+		return scrt.Data[GenericScrtKey], scrt.Data[GenericScrtCert], nil
+	}
+	if hasValue(scrt.Data, TLSSecretCert, TLSSecretKey) {
+		return scrt.Data[TLSSecretKey], scrt.Data[TLSSecretCert], nil
+	}
+	log.Infof("Not TLS atleast")
+	if hasValue(scrt.Data, "inline_bytes", "inline_string") {
+		log.Infof("Found inline_bytes or string")
+		return scrt.Data["inline_bytes"], scrt.Data["inline_string"], nil
+	}
+	log.Infof("Seriously no cert found")
+	// No cert found. Try to generate a helpful error messsage
+	if hasKeys(scrt.Data, GenericScrtCert, GenericScrtKey) {
+		return nil, nil, fmt.Errorf("found keys %q and %q, but they were empty", GenericScrtCert, GenericScrtKey)
+	}
+	if hasKeys(scrt.Data, TLSSecretCert, TLSSecretKey) {
+		return nil, nil, fmt.Errorf("found keys %q and %q, but they were empty", TLSSecretCert, TLSSecretKey)
+	}
+	if hasKeys(scrt.Data, TLSSecretCert, TLSSecretKey) {
+		return nil, nil, fmt.Errorf("found keys %q and %q, but they were empty", "inline_bytes", "inline_string")
 	}
 	found := truncatedKeysMessage(scrt.Data)
 	return nil, nil, fmt.Errorf("found secret, but didn't have expected keys (%s and %s) or (%s and %s); found: %s",
