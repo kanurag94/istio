@@ -2436,6 +2436,19 @@ func TestShouldH2Upgrade(t *testing.T) {
 			upgrade: true,
 		},
 		{
+			name:        "mesh default - dr useClientProtocol and upgrade",
+			clusterName: "bar",
+			port:        &model.Port{Protocol: protocol.HTTP},
+			mesh:        &meshconfig.MeshConfig{},
+			connectionPool: &networking.ConnectionPoolSettings{
+				Http: &networking.ConnectionPoolSettings_HTTPSettings{
+					H2UpgradePolicy:   networking.ConnectionPoolSettings_HTTPSettings_UPGRADE,
+					UseClientProtocol: true,
+				},
+			},
+			upgrade: false,
+		},
+		{
 			name:        "mesh no_upgrade - dr default",
 			clusterName: "bar",
 			port:        &model.Port{Protocol: protocol.HTTP},
@@ -2473,6 +2486,18 @@ func TestShouldH2Upgrade(t *testing.T) {
 		},
 		{
 			name:        "mesh upgrade - dr useClientProtocol",
+			clusterName: "bar",
+			port:        &model.Port{Protocol: protocol.HTTP},
+			mesh:        &meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
+			connectionPool: &networking.ConnectionPoolSettings{
+				Http: &networking.ConnectionPoolSettings_HTTPSettings{
+					UseClientProtocol: true,
+				},
+			},
+			upgrade: false,
+		},
+		{
+			name:        "mesh upgrade - dr upgrade and useClientProtocol",
 			clusterName: "bar",
 			port:        &model.Port{Protocol: protocol.HTTP},
 			mesh:        &meshconfig.MeshConfig{H2UpgradePolicy: meshconfig.MeshConfig_UPGRADE},
